@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "name": "Bedroom AC",
+  "brand": "LG",
+  "model": "6711A20083V",
+  "kind": "AC",
+  "protocol": "LG28",
+  "temperature": 24,
+  "mode": 0,
+  "fan": 5,
+  "commands": {}
+}
