@@ -42,6 +42,8 @@ Limits: 512 KB per transferred JSON file, 64 commands with names of 1–60 chara
 
 ## Whirlpool profiles
 
-Use `WHIRLPOOL3A` for DG11J1-3A/04 or `WHIRLPOOL91` for DG11J1-91. Temperature bounds are 18–32°C and 16–30°C respectively. Shared mode values are 0 Cool, 1 Dry, 2 Fan, 4 Heat; 3 Auto/6th Sense is intentionally rejected. Fan values are 5 Auto, 1 Low, 2 Medium, 4 High; 0 Lowest is rejected.
+Use `WHIRLPOOL3A` for DG11J1-3A/04 or `WHIRLPOOL91` for DG11J1-91. Temperature bounds are 18–32°C and 16–30°C respectively. Shared mode values are 0 Cool, 1 Dry, 2 Fan, 3 basic 6th Sense/Auto, 4 Heat. Auto encodes 23°C and automatic fan. Fan values are 5 Auto, 1 Low, 2 Medium, 4 High; 0 Lowest is rejected.
 
-Optional `acCommand` records the last changed setting: 2 temperature (default), 6 mode, 17 fan. Power command 1 is generated transiently and is rejected here. Each Apply carries full basic state with the power-toggle bit clear; Power on/off carries the same state with the toggle bit set. Existing version-1 LG/RAW profiles lacking `acCommand` still load unchanged. Earlier app builds will reject the new Whirlpool protocol strings; install v1.1.0 or newer before importing these profiles.
+Optional `acCommand` records the last changed setting: 2 temperature (default), 3 sleep, 4 Turbo, 6 mode, 7 swing, 17 fan, 23 basic 6th Sense. Power command 1 is generated transiently and is rejected here. Each ordinary button action carries complete state with the power-toggle bit clear; Power carries the state with the toggle bit set. These categories do not send until the user taps a control.
+
+Optional boolean fields `swing`, `sleep` and `turbo` default to false when absent. They must be JSON booleans. Auto forces 23°C/Auto fan and clears sleep/Turbo in the transmitted frame. Turbo forces high fan and the appropriate temperature extreme; sleep forces low fan when Turbo is off. The UI updates those dependent values together. Older basic profiles still load unchanged. Use v1.2.0+ for these fields and commands; older builds may reject new command categories or ignore extra flags.

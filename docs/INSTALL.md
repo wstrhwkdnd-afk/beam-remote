@@ -30,6 +30,6 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 3. To test hardware, turn Preview off and point the phone at the appliance from about 0.5–1 m away.
 4. Send one command, then observe the appliance. The app cannot confirm reception.
 
-For a Whirlpool AC, turn the AC on with its original remote before testing **Apply settings**. **Power on/off** is a toggle; send it once and observe before tapping again. Candidate families are DG11J1-3A/04 and DG11J1-91. **DG11J1-35 compatibility is unverified.**
+For a Whirlpool AC, turn the AC on with its original remote before testing a temperature change. In v1.2.0 each button sends immediately; no Apply step is needed. **Power on/off** is a toggle; send it once and observe before tapping again. Candidate families are DG11J1-3A/04 and DG11J1-91. A user has reported basic operation for DG11J1-35 using the 3A/04 profile; individual functions and new extras still need verification.
 
 For detailed device verification and troubleshooting, see [TESTING.md](TESTING.md). To add custom scenes or exchange profiles, see [PROFILE_FORMAT.md](PROFILE_FORMAT.md) and the JSON files in `examples/`.

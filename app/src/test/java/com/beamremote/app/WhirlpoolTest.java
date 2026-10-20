@@ -54,7 +54,7 @@ public class WhirlpoolTest {
         assertThrows(IllegalArgumentException.class, () -> WhirlpoolEncoder.state(false,false,33,0,5,2));
         assertThrows(IllegalArgumentException.class, () -> WhirlpoolEncoder.state(true,false,15,0,5,2));
         assertThrows(IllegalArgumentException.class, () -> WhirlpoolEncoder.state(true,false,31,0,5,2));
-        assertThrows(IllegalArgumentException.class, () -> WhirlpoolEncoder.state(true,false,24,3,5,2));
+        assertThrows(IllegalArgumentException.class, () -> WhirlpoolEncoder.state(true,false,24,5,5,2));
         assertThrows(IllegalArgumentException.class, () -> WhirlpoolEncoder.state(true,false,24,0,0,2));
         assertThrows(IllegalArgumentException.class, () -> WhirlpoolEncoder.state(true,false,24,0,5,1));
     }
@@ -68,6 +68,48 @@ public class WhirlpoolTest {
             assertArrayEquals(p.acSignal(false).pattern(),copy.acSignal(false).pattern());
             JSONObject invalid = p.json().put("kind","TV");
             assertThrows(IllegalArgumentException.class, () -> Profile.parse(invalid));
+        }
+    }
+    @Test public void extraControlsHaveIndependentWireBitsAndChecksums() {
+        // 24C Cool, low fan, swing + sleep. Wire fields follow the published Whirlpool layout.
+        byte[] expected = {(byte)0x83,6,(byte)0x8B,0x62,0,0,(byte)0x80,0,0x40,0,0,0,0,0x29,0,3,0,0,0,0,3};
+        assertArrayEquals(expected, WhirlpoolEncoder.state(false,false,24,0,5,3,true,true,false));
+        byte[] turbo = WhirlpoolEncoder.state(false,false,24,0,5,4,false,false,true);
+        assertEquals(1,turbo[2]); assertEquals(2,turbo[3]); assertEquals(0x90,turbo[5] & 255);
+        assertEquals(0x13,turbo[13] & 255); assertEquals(4,turbo[15]);
+        byte[] auto = WhirlpoolEncoder.state(false,false,24,3,1,23,false,false,false);
+        assertEquals(0,auto[2]); assertEquals(0x51,auto[3]); assertEquals(0xD1,auto[13] & 255);
+        assertEquals(23,auto[15]); assertEquals(23,auto[20]);
+        byte[] power = WhirlpoolEncoder.state(false,true,24,0,5,4,true,false,true);
+        assertEquals(0,power[5]); assertEquals(1,power[15]); assertEquals(4,power[2] & 4);
+        byte[] off = WhirlpoolEncoder.state(false,false,24,0,5,7,false,false,false);
+        assertEquals(0,off[2] & 0x88); assertEquals(0,off[8]);
+    }
+    @Test public void extraControlsPersistAndLegacyProfilesDefaultOff() throws Exception {
+        Profile p = Catalog.create(6,"Bedroom");
+        p.whirlpoolMode(3); assertEquals(23,p.acCommand); assertEquals(23,p.temperature); assertEquals(5,p.fan);
+        p.whirlpoolSleep(true); assertEquals(0,p.mode); assertEquals(1,p.fan); assertFalse(p.turbo);
+        p.swing = true;
+        Profile copy = Profile.parse(new JSONObject(p.json().toString()));
+        assertTrue(copy.swing); assertTrue(copy.sleep); assertFalse(copy.turbo);
+        assertArrayEquals(p.acSignal(false).pattern(),copy.acSignal(false).pattern());
+        p.whirlpoolTurbo(true); assertFalse(p.sleep); assertEquals(18,p.temperature); assertEquals(4,p.fan);
+        p.whirlpoolMode(4); assertFalse(p.turbo);
+        p.whirlpoolTurbo(true); assertEquals(32,p.temperature);
+        JSONObject old = Catalog.create(6,"Legacy").json();
+        old.remove("swing"); old.remove("sleep"); old.remove("turbo");
+        Profile legacy = Profile.parse(old); assertFalse(legacy.swing || legacy.sleep || legacy.turbo);
+        old.put("swing","true");
+        assertThrows(IllegalArgumentException.class, () -> Profile.parse(old));
+    }
+    @Test public void advancedSignalsRemainBoundedAcrossAllFlagCombinations() {
+        for (boolean m : new boolean[]{false,true}) for (boolean swing : new boolean[]{false,true})
+        for (boolean sleep : new boolean[]{false,true}) for (boolean turbo : new boolean[]{false,true}) {
+            byte[] b = WhirlpoolEncoder.state(m,false,24,0,5,7,swing,sleep,turbo);
+            int sum = 0; for (int i=2;i<=11;i++) sum ^= b[i] & 255;
+            assertEquals(sum,b[13] & 255);
+            Signal signal = WhirlpoolEncoder.signal(m,false,24,0,5,7,swing,sleep,turbo);
+            assertEquals(343,signal.pattern().length); assertTrue(signal.durationMicros() < 2000000);
         }
     }
     @Test public void legacyProfilesStillLoadAndDefaultCommandIsSafe() throws Exception {

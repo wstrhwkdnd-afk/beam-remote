@@ -126,8 +126,10 @@ public final class MainActivity extends Activity {
                 }
             }
         }
-        status = text(panel, "Ready when you are. Appliance state is not known.", 14, MUTED);
-        status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        if (!p.hasAcEncoder()) {
+            status = text(panel, "Ready when you are. Appliance state is not known.", 14, MUTED);
+            status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        }
         LinearLayout manage = card(); title(manage, "Make it yours", 20);
         text(manage, "Code families are candidates, not guaranteed matches. Test with the appliance in view.", 14, MUTED);
         button(manage, "Edit name, brand & model", false, this::editProfile);
@@ -141,33 +143,71 @@ public final class MainActivity extends Activity {
             }).show());
     }
     private void acControls(LinearLayout panel, Profile p) {
-        text(panel, "DESIRED SETTINGS · NOT LIVE STATUS", 12, GREEN);
-        TextView temp = text(panel, p.temperature + "°C", 52, INK); temp.setGravity(Gravity.CENTER); temp.setTypeface(null, Typeface.BOLD);
-        LinearLayout r = row(panel);
-        button(r, "−  Cooler", false, () -> { p.temperature = Math.max(p.minTemperature(), p.temperature - 1); p.acCommand = 2; persist(profiles); temp.setText(p.temperature + "°C"); });
-        button(r, "+  Warmer", false, () -> { p.temperature = Math.min(p.maxTemperature(), p.temperature + 1); p.acCommand = 2; persist(profiles); temp.setText(p.temperature + "°C"); });
-        text(panel, "Mode", 14, MUTED);
-        int[] modes = p.isWhirlpool() ? new int[]{0, 1, 2, 4} : new int[]{0, 1, 2, 3, 4};
-        Spinner mode = spinner(panel, p.isWhirlpool() ? new String[]{"Cool", "Dry", "Fan", "Heat"} : new String[]{"Cool", "Dry", "Fan", "Auto", "Heat"});
-        mode.setContentDescription("AC mode");
-        for (int i = 0; i < modes.length; i++) if (modes[i] == p.mode) mode.setSelection(i);
-        mode.setOnItemSelectedListener(listener(i -> { if (p.mode != modes[i]) { p.mode = modes[i]; p.acCommand = 6; persist(profiles); } }));
-        text(panel, "Fan speed", 14, MUTED);
-        int[] fans = p.isWhirlpool() ? new int[]{5, 1, 2, 4} : new int[]{5, 0, 1, 2, 4};
-        Spinner fan = spinner(panel, p.isWhirlpool() ? new String[]{"Auto", "Low", "Medium", "High"} : new String[]{"Auto", "Lowest", "Low", "Medium", "High"});
-        fan.setContentDescription("Fan speed");
-        for (int i = 0; i < fans.length; i++) if (fans[i] == p.fan) fan.setSelection(i);
-        fan.setOnItemSelectedListener(listener(i -> { if (p.fan != fans[i]) { p.fan = fans[i]; p.acCommand = 17; persist(profiles); } }));
+        panel.setBackground(background(0xFFE5E8E4, 38)); panel.setElevation(dp(3));
+        LinearLayout.LayoutParams shellParams = (LinearLayout.LayoutParams) panel.getLayoutParams();
+        shellParams.width = Math.min(getResources().getDisplayMetrics().widthPixels - dp(40), dp(390));
+        shellParams.gravity = Gravity.CENTER_HORIZONTAL; panel.setLayoutParams(shellParams);
+        TextView brand = text(panel, "B E A M   ·   A C", 13, GREEN); brand.setGravity(Gravity.CENTER);
+        LinearLayout lcd = column(); lcd.setPadding(dp(14), dp(10), dp(14), dp(10));
+        lcd.setBackground(background(0xFFD2DFC8, 18)); panel.addView(lcd);
+        TextView caption = text(lcd, "REMOTE SETTINGS · NOT LIVE STATUS", 10, MUTED); caption.setGravity(Gravity.CENTER);
+        TextView temp = text(lcd, p.temperature + "°C", 58, INK);
+        temp.setGravity(Gravity.CENTER); temp.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
+        String[] modeNames = {"Cool", "Dry", "Fan", p.isWhirlpool() ? "6th Sense" : "Auto", "Heat"};
+        String fanName = p.fan == 5 ? "Auto" : p.fan == 4 ? "High" : p.fan == 2 ? "Medium" : p.fan == 1 ? "Low" : "Lowest";
+        TextView summary = text(lcd, modeNames[p.mode] + "   ·   Fan " + fanName, 16, INK); summary.setGravity(Gravity.CENTER);
         if (p.isWhirlpool()) {
-            text(panel, "Changing a setting does not send it. Apply sends the complete settings without toggling power. Use Power on/off once to change the appliance’s power.", 14, MUTED);
-            button(panel, "Apply settings", true, () -> send(p.acSignal(false)));
-            button(panel, "Power on/off (toggle)", false, () -> send(p.acSignal(true)));
-            text(panel, "Whirlpool candidate · " + p.minTemperature() + "–" + p.maxTemperature() + "°C. Heat requires a heating-capable AC. 6th Sense, swing, sleep, turbo and timers are not included; use custom captured scenes for those features. Appliance state is unknown.", 14, MUTED);
-        } else {
-            text(panel, "Changing a setting does not send it. “Turn on / Apply” sends all settings together.", 14, MUTED);
-            button(panel, "Turn on / Apply settings", true, () -> send(p.acSignal(true)));
-            button(panel, "Turn off", false, () -> send(p.acSignal(false)));
+            String extras = (p.swing ? "Swing ON" : "Swing OFF") + "   ·   " + (p.sleep ? "Sleep ON" : "Sleep OFF") + "   ·   " + (p.turbo ? "Turbo ON" : "Turbo OFF");
+            TextView flags = text(lcd, extras, 12, MUTED); flags.setGravity(Gravity.CENTER);
         }
+        status = text(lcd, preview ? "Ready · Preview only" : "Ready · Point at the AC", 12, MUTED);
+        status.setGravity(Gravity.CENTER); status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        if (p.isWhirlpool()) {
+            Button power = button(panel, "Power on / off", true, () -> acTap(panel, p, () -> p.turbo = false, true));
+            power.setBackground(background(0xFF9E3D39, 28));
+        } else {
+            LinearLayout power = row(panel);
+            button(power, "Power on", true, () -> acTap(panel, p, () -> {}, true));
+            button(power, "Off", false, () -> acTap(panel, p, () -> {}, false));
+        }
+        LinearLayout temperatures = row(panel);
+        Button minus = button(temperatures, "−  TEMP", false, () -> acTap(panel, p, () -> { p.temperature--; p.acCommand = 2; p.turbo = false; }, !p.isWhirlpool()));
+        Button plus = button(temperatures, "TEMP  +", false, () -> acTap(panel, p, () -> { p.temperature++; p.acCommand = 2; p.turbo = false; }, !p.isWhirlpool()));
+        minus.setContentDescription("Temperature down one degree"); plus.setContentDescription("Temperature up one degree");
+        minus.setEnabled(p.temperature > p.minTemperature() && !(p.isWhirlpool() && p.mode == 3));
+        plus.setEnabled(p.temperature < p.maxTemperature() && !(p.isWhirlpool() && p.mode == 3));
+        LinearLayout basics = row(panel);
+        button(basics, "Mode", false, () -> acTap(panel, p, () -> {
+            int[] modes = p.isWhirlpool() ? new int[]{0,1,2,4} : new int[]{0,1,2,3,4};
+            int next = modes[0];
+            for (int i=0;i<modes.length;i++) if (modes[i] == p.mode) next = modes[(i+1)%modes.length];
+            if (p.isWhirlpool()) p.whirlpoolMode(next); else { p.mode = next; p.acCommand = 6; }
+        }, !p.isWhirlpool()));
+        Button fan = button(basics, "Fan speed", false, () -> acTap(panel, p, () -> {
+            int[] speeds = p.isWhirlpool() ? new int[]{5,1,2,4} : new int[]{5,0,1,2,4};
+            int next = speeds[0];
+            for (int i=0;i<speeds.length;i++) if (speeds[i] == p.fan) next = speeds[(i+1)%speeds.length];
+            p.fan = next; p.acCommand = 17; p.turbo = false;
+            if (p.isWhirlpool() && p.fan != 1) p.sleep = false;
+        }, !p.isWhirlpool()));
+        fan.setEnabled(!(p.isWhirlpool() && p.mode == 3));
+        if (p.isWhirlpool()) {
+            LinearLayout extras = row(panel);
+            button(extras, "6th Sense", p.mode == 3, () -> acTap(panel, p, () -> p.whirlpoolMode(3), false));
+            button(extras, p.swing ? "Swing · ON" : "Swing", p.swing, () -> acTap(panel, p, () -> { p.swing = !p.swing; p.acCommand = 7; }, false));
+            LinearLayout comfort = row(panel);
+            button(comfort, p.sleep ? "Sleep · ON" : "Sleep", p.sleep, () -> acTap(panel, p, () -> p.whirlpoolSleep(!p.sleep), false));
+            button(comfort, p.turbo ? "Turbo · ON" : "Turbo", p.turbo, () -> acTap(panel, p, () -> p.whirlpoolTurbo(!p.turbo), false));
+        }
+        text(panel, preview ? "Each tap previews one command. Nothing is transmitted." : "Each tap sends one command. Point the phone at the AC.", 13, MUTED);
+        if (p.isWhirlpool() && p.mode == 3) text(panel, "Basic 6th Sense uses 23°C / Auto fan. Press Mode for manual controls.", 13, MUTED);
+        if (p.isWhirlpool()) text(panel, "Extra functions are experimental. Sleep uses low fan; Turbo uses high fan and a temperature limit. Timers are not included. Heat requires a heating-capable AC.", 12, MUTED);
+    }
+    private void acTap(LinearLayout panel, Profile p, Runnable change, boolean powerAction) {
+        if (transmitter.isBusy()) { status.setText("Please wait for the previous signal."); return; }
+        change.run(); persist(profiles);
+        panel.removeAllViews(); acControls(panel, p);
+        send(p.acSignal(powerAction));
     }
     private interface Selection { void choose(int index); }
     private AdapterView.OnItemSelectedListener listener(Selection selected) {
@@ -190,7 +230,7 @@ public final class MainActivity extends Activity {
         LinearLayout tips = card(); title(tips, "Start here", 22);
         text(tips, "1. Add a device and pick its remote code family. A remote model is often printed inside its battery cover.\n\n2. Point your phone’s IR window at the appliance. Start close, with clear line of sight.\n\n3. Try one command. If it does not work, select a different profile or import verified codes.\n\n4. Rename a working profile for its room.", 16, MUTED);
         LinearLayout limits = card(); title(limits, "What to expect", 22);
-        text(limits, "A built-in IR emitter must be exposed through Android’s ConsumerIrManager. Some phones require unsupported vendor APIs. An emulator cannot emit IR.\n\nIR is one-way: “sent” does not mean the appliance responded. Power toggles may become out of sync.\n\nAC protocols vary by model. LG presets cover basic power, temperature, mode and fan; swing, timers and special features are not included. Whirlpool presets support basic settings and a power toggle for DG11J1 remote families. For other models or advanced functions, import complete raw state scenes.\n\nYour phone cannot learn a remote through this API. Capturing codes requires a separate IR receiver. Bluetooth, RF and Wi-Fi remotes are not supported.\n\nProfiles stay on this phone. No account, network permission, or analytics.", 16, MUTED);
+        text(limits, "A built-in IR emitter must be exposed through Android’s ConsumerIrManager. Some phones require unsupported vendor APIs. An emulator cannot emit IR.\n\nIR is one-way: “sent” does not mean the appliance responded. Power toggles may become out of sync.\n\nAC protocols vary by model. LG presets cover basic power, temperature, mode and fan; swing, timers and special features are not included. Whirlpool presets include basic settings, a power toggle, and experimental basic 6th Sense, vertical swing, sleep and Turbo for DG11J1 remote families. For other models or advanced functions, import complete raw state scenes.\n\nYour phone cannot learn a remote through this API. Capturing codes requires a separate IR receiver. Bluetooth, RF and Wi-Fi remotes are not supported.\n\nProfiles stay on this phone. No account, network permission, or analytics.", 16, MUTED);
     }
     private LinearLayout form() { LinearLayout form = column(); form.setPadding(dp(22), dp(8), dp(22), dp(12)); return form; }
     private EditText field(LinearLayout form, String label, String initial) {

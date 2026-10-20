@@ -16,6 +16,7 @@ public final class IrTransmitter {
     private static final AtomicBoolean busy = new AtomicBoolean(false);
     private volatile boolean closed;
     public IrTransmitter(Context context) { manager = (ConsumerIrManager) context.getSystemService(Context.CONSUMER_IR_SERVICE); }
+    public boolean isBusy() { return busy.get(); }
     public boolean available() {
         try { return manager != null && manager.hasIrEmitter(); }
         catch (RuntimeException e) { return false; }

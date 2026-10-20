@@ -7,6 +7,7 @@ public final class Profile {
     public String id = UUID.randomUUID().toString();
     public String name, brand, model, kind, protocol;
     public int temperature = 24, mode = 0, fan = 5, acCommand = 2;
+    public boolean swing, sleep, turbo;
     public final LinkedHashMap<String, Signal> commands = new LinkedHashMap<>();
     public boolean isAc() { return "AC".equals(kind); }
     public boolean isWhirlpool() { return "WHIRLPOOL3A".equals(protocol) || "WHIRLPOOL91".equals(protocol); }
@@ -14,13 +15,14 @@ public final class Profile {
     public int minTemperature() { return "WHIRLPOOL3A".equals(protocol) ? 18 : 16; }
     public int maxTemperature() { return "WHIRLPOOL3A".equals(protocol) ? 32 : 30; }
     public Signal acSignal(boolean powerAction) {
-        if (isWhirlpool()) return WhirlpoolEncoder.signal("WHIRLPOOL91".equals(protocol), powerAction, temperature, mode, fan, acCommand);
+        if (isWhirlpool()) return WhirlpoolEncoder.signal("WHIRLPOOL91".equals(protocol), powerAction, temperature, mode, fan, acCommand, swing, sleep, turbo);
         return Encoders.lg("LG2".equals(protocol), powerAction, temperature, mode, fan);
     }
     public JSONObject json() throws JSONException {
         JSONObject root = new JSONObject().put("schemaVersion", 1).put("id", id)
             .put("name", name).put("brand", brand).put("model", model).put("kind", kind)
-            .put("protocol", protocol).put("temperature", temperature).put("mode", mode).put("fan", fan).put("acCommand", acCommand);
+            .put("protocol", protocol).put("temperature", temperature).put("mode", mode).put("fan", fan).put("acCommand", acCommand)
+            .put("swing", swing).put("sleep", sleep).put("turbo", turbo);
         JSONObject codes = new JSONObject();
         for (Map.Entry<String, Signal> entry : commands.entrySet()) {
             JSONArray pattern = new JSONArray();
@@ -44,6 +46,7 @@ public final class Profile {
         p.mode = root.has("mode") ? integer(root.get("mode")) : 0;
         p.fan = root.has("fan") ? integer(root.get("fan")) : 5;
         p.acCommand = root.has("acCommand") ? integer(root.get("acCommand")) : 2;
+        p.swing = bool(root, "swing"); p.sleep = bool(root, "sleep"); p.turbo = bool(root, "turbo");
         if (p.isWhirlpool()) p.acSignal(false);
         else Encoders.lgCode(true, p.temperature, p.mode, p.fan);
         JSONObject codes = root.getJSONObject("commands");
@@ -60,6 +63,28 @@ public final class Profile {
             p.commands.put(key, new Signal(integer(code.get("frequency")), pattern));
         }
         return p;
+    }
+    public void whirlpoolMode(int next) {
+        mode = next; turbo = false; acCommand = next == 3 ? 23 : 6;
+        if (next == 3) { temperature = 23; fan = 5; sleep = false; }
+    }
+    public void whirlpoolSleep(boolean on) {
+        sleep = on; turbo = false; acCommand = 3;
+        if (on) { if (mode == 3) mode = 0; fan = 1; }
+    }
+    public void whirlpoolTurbo(boolean on) {
+        turbo = on; acCommand = 4;
+        if (on) {
+            sleep = false;
+            if (mode != 4) mode = 0;
+            fan = 4; temperature = mode == 4 ? maxTemperature() : minTemperature();
+        }
+    }
+    private static boolean bool(JSONObject root, String key) throws JSONException {
+        if (!root.has(key)) return false;
+        Object value = root.get(key);
+        if (!(value instanceof Boolean)) throw new IllegalArgumentException(key + " must be true or false.");
+        return (Boolean) value;
     }
     private static String text(JSONObject object, String key, int limit) throws JSONException {
         Object value = object.get(key);

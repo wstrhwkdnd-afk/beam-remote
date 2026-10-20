@@ -55,9 +55,18 @@ See `VALIDATION.md` for the checks actually completed for this delivery. Physica
 
 ## Whirlpool acceptance checks
 
-- Add both Whirlpool candidates and confirm temperature limits: 18–32°C for 3A/04, 16–30°C for 91. Verify Cool/Dry/Fan/Heat and Auto/Low/Medium/High fan lists; no unsupported 6th Sense option.
-- In Preview, Apply and Power each show a 38 kHz / 343-duration signal. Changing controls alone must not send. Inspect a receiver capture: Apply must have the toggle bit clear, Power must set it and use command category 1. Apply after Power must clear it again.
+- Add both Whirlpool candidates and confirm temperature limits: 18–32°C for 3A/04, 16–30°C for 91. Verify Cool/Dry/Fan/Heat and Auto/Low/Medium/High fan lists; the separate experimental 6th Sense button.
+- In Preview, each settings button and Power show a 38 kHz / 343-duration signal. Each deliberate button tap must send exactly once; opening a screen and restoring settings must never send. Inspect a receiver capture: Settings actions must have the toggle bit clear, Power must set it and use command category 1. A temperature action after Power must clear it again.
 - Restart and export/import after selecting Heat, Low fan and a boundary temperature. The model, values and last-command category should survive; no power toggle should be persisted or transmitted automatically.
-- On matching physical hardware, test a single Power toggle and confirm response, then Apply a different temperature without toggling power. Verify modes/fans and both model variants only on compatible units. Check for required repeat behavior, inter-section timing and carrier compatibility.
-- Test with previously enabled timers/special modes: basic frames carry those flags off. No claim is made that these advanced settings are preserved.
+- On matching physical hardware, test a single Power toggle and confirm response, then tap to change temperature without toggling power. Verify modes/fans and both model variants only on compatible units. Check for required repeat behavior, inter-section timing and carrier compatibility.
+- Test with previously enabled timers/special modes: timer flags remain off; the new sleep/swing/Turbo flags reflect desired settings. No claim is made that these advanced settings are preserved.
 - Regression: existing LG controls retain explicit Off and On/Apply behavior, and existing TV/raw profiles remain usable.
+
+## v1.2.0 remote acceptance checks
+
+- Tap TEMP + once: exactly one degree change and one send/preview. Tap TEMP − once to reverse. Boundary buttons are disabled. No long-press repeats.
+- Tap Mode/Fan: cycle one setting and send once. No Apply button. Power must not repeat or send while restoring the screen.
+- In basic 6th Sense, check 23°C / Auto fan and disabled temperature/fan controls. Mode returns to manual settings.
+- Tap Swing/Sleep/Turbo on and off individually. Observe the AC, not just a beep. Verify sleep's low fan and Turbo's high fan/temperature extreme. Repeat after restart and JSON export/import.
+- During an active send, another tap must not change desired settings or queue a later power toggle. After completion the next tap works normally.
+- Existing saved Whirlpool profiles without new flags load with all extra flags off. LG retains explicit On/Off and sends settings per tap.

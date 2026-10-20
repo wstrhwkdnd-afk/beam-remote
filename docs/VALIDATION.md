@@ -35,3 +35,11 @@ Physical IR transmission, OEM driver timing/frequency behavior, appliance compat
 `assembleDebug`, `testDebugUnitTest`, and `lintDebug` passed for the updated APK. Six new Whirlpool tests cover golden 24°C frames for both models, transient toggle semantics, 960 combinations of model/temperature/mode/fan/power with waveform decoding and checksums, unsupported settings, model-specific profile round-trips, and backward-compatible legacy imports. The complete suite now has 15 passing tests. Version code is 2 for installation over v1.0.0.
 
 The new Whirlpool screens were compiled and lint-checked but were not rerun on an emulator in this update. The emulator observations above are the original MVP baseline, not Whirlpool hardware certification. Physical Whirlpool IR reception and appliance behavior remain untested; follow the Whirlpool acceptance checks in TESTING.md.
+
+## v1.2.0 remote controls — 20 October 2026
+
+Debug build and Android lint passed; all 18 JVM tests passed. Added checks cover explicit wire fields/checksums for basic 6th Sense, sleep, swing and Turbo, settings interactions, profile persistence with strict boolean validation, legacy defaults and bounded waveforms. These remain candidate commands requiring physical verification.
+
+The AC screen now uses a remote-shaped panel and explicit one-tap buttons. It does not transmit on rendering, profile opening, import or restore. Busy-state checks precede desired-setting mutation. Whirlpool power stays a transient single toggle. A user reported basic AC operation with the 3A/04 profile and DG11J1-35 remote family, but did not enumerate individual working functions.
+
+The API37 emulator was started in a visible window. Initial system/launcher stalls were resolved by restarting with host graphics. Verified in Preview: the Whirlpool screen opens without sending; one TEMP+ tap changes 24°C to 25°C and previews a 38kHz/343-duration command; 6th Sense selects 23°C/Auto fan and disables manual temperature/fan controls; Swing and Turbo update their flags, with Turbo selecting 18°C/High fan and clearing Sleep. Saved legacy profiles remained available after update. The final remote screenshot was inspected. No physical reception or full accessibility certification is implied.
