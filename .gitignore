@@ -20,3 +20,4 @@ work/
 captures/
 .externalNativeBuild/
 .cxx/
+*.beamzip

@@ -47,3 +47,7 @@ Use `WHIRLPOOL3A` for DG11J1-3A/04 or `WHIRLPOOL91` for DG11J1-91. Temperature b
 Optional `acCommand` records the last changed setting: 2 temperature (default), 3 sleep, 4 Turbo, 6 mode, 7 swing, 17 fan, 23 basic 6th Sense. Power command 1 is generated transiently and is rejected here. Each ordinary button action carries complete state with the power-toggle bit clear; Power carries the state with the toggle bit set. These categories do not send until the user taps a control.
 
 Optional boolean fields `swing`, `sleep` and `turbo` default to false when absent. They must be JSON booleans. Auto forces 23°C/Auto fan and clears sleep/Turbo in the transmitted frame. Turbo forces high fan and the appropriate temperature extreme; sleep forces low fan when Turbo is off. The UI updates those dependent values together. Older basic profiles still load unchanged. Use v1.2.0+ for these fields and commands; older builds may reject new command categories or ignore extra flags.
+
+## Library-backed saved devices (v1.3.0)
+
+`protocol: "LIBRARY"` requires kind AC and fields `libraryId` (64 lowercase SHA-256 hexadecimal digits), `libraryEntry` (profile JSON path), `libraryModeCode` (C/H/W/D/A/AI/F) and `libraryFanCode` (source digit or A). Temperature permits 0–100 for source units, including Fahrenheit candidates. A saved device references rather than embeds its library. Import the same library on a receiving phone before using its saved-device JSON. Older app versions do not accept LIBRARY profiles. See [PROFILE_LIBRARY.md](PROFILE_LIBRARY.md).

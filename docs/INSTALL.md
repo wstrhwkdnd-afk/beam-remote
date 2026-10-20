@@ -33,3 +33,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 For a Whirlpool AC, turn the AC on with its original remote before testing a temperature change. In v1.2.0 each button sends immediately; no Apply step is needed. **Power on/off** is a toggle; send it once and observe before tapping again. Candidate families are DG11J1-3A/04 and DG11J1-91. A user has reported basic operation for DG11J1-35 using the 3A/04 profile; individual functions and new extras still need verification.
 
 For detailed device verification and troubleshooting, see [TESTING.md](TESTING.md). To add custom scenes or exchange profiles, see [PROFILE_FORMAT.md](PROFILE_FORMAT.md) and the JSON files in `examples/`.
+
+## Add an offline profile library
+
+On Devices, choose **Import profile library**, select your `.beamzip` file, search the brand and test a numbered candidate. **All commands** contains the extra functions available in that candidate. Scroll to **Save this remote** after checking the required controls on your AC. The app does not automatically scan candidates or confirm reception. [Full library guide](PROFILE_LIBRARY.md).

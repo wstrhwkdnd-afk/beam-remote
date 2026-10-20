@@ -70,3 +70,12 @@ See `VALIDATION.md` for the checks actually completed for this delivery. Physica
 - Tap Swing/Sleep/Turbo on and off individually. Observe the AC, not just a beep. Verify sleep's low fan and Turbo's high fan/temperature extreme. Repeat after restart and JSON export/import.
 - During an active send, another tap must not change desired settings or queue a later power toggle. After completion the next tap works normally.
 - Existing saved Whirlpool profiles without new flags load with all extra flags off. LG retains explicit On/Off and sends settings per tap.
+
+## Optional profile libraries
+
+- Import a library through the Android document picker; search brands and open/close multiple candidates. No transmission should occur until a command is deliberately tapped.
+- In Preview, verify one temperature step resolves one stored command and respects missing combinations; candidate trials do not enter the saved-device list until Save this remote. Save and restart, then check the same library reference and requested settings.
+- Check a relative-only fan/mode candidate as well as full-state candidates; valid relative controls must be enabled even without an absolute speed list.
+- All commands must expose stored extra functions; malformed signals report errors before requested state changes. Test the six identified source defects separately from valid commands.
+- Import an unrelated library and ensure existing remotes still use their original hash-bound library. An exported device without its original library must show an import-needed error.
+- Synthetic tests cover Pronto count validation versus explicit compatibility timing, signal limits, unsafe/duplicate archive paths and library metadata/reference validation. Never treat these checks as appliance certification.

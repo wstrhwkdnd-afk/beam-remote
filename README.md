@@ -2,7 +2,7 @@
 
 An ad-free native Android infrared remote MVP for TVs and air conditioners, built with AI as a development partner. It uses your phone’s built-in IR blaster through Android’s public `ConsumerIrManager` API.
 
-**No ads, accounts, analytics, or internet permission.** Android 6.0 / API 23 or newer. The project is at version **1.2.0** and is licensed under [MIT](LICENSE).
+**No ads, accounts, analytics, or internet permission.** Android 6.0 / API 23 or newer. The project is at version **1.3.0** and is licensed under [MIT](LICENSE).
 
 <img src="docs/images/ac-remote.png" alt="Beam Remote AC controls in preview mode" width="280">
 <img src="docs/images/tv-remote.png" alt="Beam Remote TV controls in preview mode" width="280">
@@ -12,6 +12,12 @@ An ad-free native Android infrared remote MVP for TVs and air conditioners, buil
 Download the development APK from [Releases](https://github.com/wstrhwkdnd-afk/beam-remote/releases), then follow the [installation and first-test guide](docs/INSTALL.md). For an Android Studio project, clone the repository or use **Code → Download ZIP**.
 
 A real Android-accessible IR emitter is required for appliance control. Phones without one can explore the interface in Preview. A successfully sent signal does not prove the appliance received it.
+
+## Offline profile library
+
+Version 1.3.0 adds optional multi-brand libraries: **Import profile library → search brand → test a candidate → Save this remote**. A library can contain hundreds of candidates without filling your saved-device list. Each button sends one stored signal; **All commands** exposes extra functions present in that candidate.
+
+A local AcRemote 3.5 interoperability investigation inventoried 86 brands and 266 candidates. That third-party data is separate from the public app/source; the APK does not include or download it. Import a library you can use. [Library guide, format and investigation findings](docs/PROFILE_LIBRARY.md).
 
 ## Device coverage
 

@@ -8,13 +8,16 @@ public final class Profile {
     public String name, brand, model, kind, protocol;
     public int temperature = 24, mode = 0, fan = 5, acCommand = 2;
     public boolean swing, sleep, turbo;
+    public String libraryId = "", libraryEntry = "", libraryModeCode = "C", libraryFanCode = "1";
     public final LinkedHashMap<String, Signal> commands = new LinkedHashMap<>();
     public boolean isAc() { return "AC".equals(kind); }
+    public boolean isLibrary() { return "LIBRARY".equals(protocol); }
     public boolean isWhirlpool() { return "WHIRLPOOL3A".equals(protocol) || "WHIRLPOOL91".equals(protocol); }
-    public boolean hasAcEncoder() { return "LG28".equals(protocol) || "LG2".equals(protocol) || isWhirlpool(); }
+    public boolean hasAcEncoder() { return "LG28".equals(protocol) || "LG2".equals(protocol) || isWhirlpool() || isLibrary(); }
     public int minTemperature() { return "WHIRLPOOL3A".equals(protocol) ? 18 : 16; }
     public int maxTemperature() { return "WHIRLPOOL3A".equals(protocol) ? 32 : 30; }
     public Signal acSignal(boolean powerAction) {
+        if (isLibrary()) throw new IllegalArgumentException("Library remotes use their imported command dictionary.");
         if (isWhirlpool()) return WhirlpoolEncoder.signal("WHIRLPOOL91".equals(protocol), powerAction, temperature, mode, fan, acCommand, swing, sleep, turbo);
         return Encoders.lg("LG2".equals(protocol), powerAction, temperature, mode, fan);
     }
@@ -23,6 +26,8 @@ public final class Profile {
             .put("name", name).put("brand", brand).put("model", model).put("kind", kind)
             .put("protocol", protocol).put("temperature", temperature).put("mode", mode).put("fan", fan).put("acCommand", acCommand)
             .put("swing", swing).put("sleep", sleep).put("turbo", turbo);
+        if (isLibrary()) root.put("libraryId", libraryId).put("libraryEntry", libraryEntry)
+            .put("libraryModeCode", libraryModeCode).put("libraryFanCode", libraryFanCode);
         JSONObject codes = new JSONObject();
         for (Map.Entry<String, Signal> entry : commands.entrySet()) {
             JSONArray pattern = new JSONArray();
@@ -38,7 +43,7 @@ public final class Profile {
         p.model = text(root, "model", 100); p.kind = text(root, "kind", 8);
         p.protocol = text(root, "protocol", 16);
         if (!(p.kind.equals("TV") || p.kind.equals("AC"))) throw new IllegalArgumentException("Device type must be TV or AC.");
-        if (!(p.protocol.equals("RAW") || p.protocol.equals("LG28") || p.protocol.equals("LG2") || p.isWhirlpool()))
+        if (!(p.protocol.equals("RAW") || p.protocol.equals("LG28") || p.protocol.equals("LG2") || p.isWhirlpool() || p.isLibrary()))
             throw new IllegalArgumentException("Unknown profile protocol.");
         if (p.hasAcEncoder() && !p.isAc()) throw new IllegalArgumentException("AC encoders require an AC profile.");
         p.id = root.has("id") ? text(root, "id", 80) : p.id;
@@ -47,7 +52,16 @@ public final class Profile {
         p.fan = root.has("fan") ? integer(root.get("fan")) : 5;
         p.acCommand = root.has("acCommand") ? integer(root.get("acCommand")) : 2;
         p.swing = bool(root, "swing"); p.sleep = bool(root, "sleep"); p.turbo = bool(root, "turbo");
-        if (p.isWhirlpool()) p.acSignal(false);
+        if (p.isLibrary()) {
+            p.libraryId = text(root, "libraryId", 64); p.libraryEntry = text(root, "libraryEntry", 400);
+            p.libraryModeCode = text(root, "libraryModeCode", 2); p.libraryFanCode = text(root, "libraryFanCode", 2);
+            if (!p.libraryId.matches("[a-f0-9]{64}") || !p.libraryEntry.startsWith("profiles/") ||
+                p.libraryEntry.contains("..") || p.libraryEntry.contains("\\") || !p.libraryEntry.endsWith(".json") ||
+                !p.libraryModeCode.matches("C|H|W|D|A|AI|F") || !p.libraryFanCode.matches("[0-9]|A") ||
+                p.temperature < 0 || p.temperature > 100)
+                throw new IllegalArgumentException("Invalid saved library remote.");
+        }
+        else if (p.isWhirlpool()) p.acSignal(false);
         else Encoders.lgCode(true, p.temperature, p.mode, p.fan);
         JSONObject codes = root.getJSONObject("commands");
         if (codes.length() > 64) throw new IllegalArgumentException("A profile can contain at most 64 commands.");

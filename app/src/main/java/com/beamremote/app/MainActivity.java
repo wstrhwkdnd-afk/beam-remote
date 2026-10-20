@@ -19,11 +19,15 @@ import java.util.concurrent.Executors;
 /** Native Android widgets, no web view, accounts, network access, or third-party UI dependencies. */
 public final class MainActivity extends Activity {
     private static final int GREEN = 0xFF176B5B, INK = 0xFF18342D, MUTED = 0xFF596B63, PAPER = 0xFFF5F4EF;
-    private static final int IMPORT = 41, EXPORT = 42;
+    private static final int IMPORT = 41, EXPORT = 42, LIBRARY_IMPORT = 43;
     private ProfileStore store;
     private IrTransmitter transmitter;
     private List<Profile> profiles = new ArrayList<>();
-    private Profile current;
+    private Profile current, trialProfile, beforeTrial;
+    private LibraryCatalog.Brand trialBrand;
+    private int trialCandidate;
+    private String cachedLibraryKey = "";
+    private LibraryProfile cachedLibraryProfile;
     private LinearLayout page;
     private TextView status;
     private String screen = "devices", pendingExport, startupError;
@@ -103,6 +107,8 @@ public final class MainActivity extends Activity {
             button(c, "Open remote", true, () -> { current = p; store.select(p.id); screen = "remote"; render(); });
         }
         button(page, "+ Add device", true, this::addDevice);
+        button(page, "Browse profile library", false, this::browseLibrary);
+        button(page, "Import profile library", false, this::pickLibraryFile);
         button(page, "Import a profile", false, () -> {
             Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE);
             startActivityForResult(intent, IMPORT);
@@ -113,7 +119,8 @@ public final class MainActivity extends Activity {
         Profile p = current;
         text(page, p.brand + " · " + p.model, 15, MUTED);
         LinearLayout panel = card();
-        if (p.hasAcEncoder()) acControls(panel, p);
+        if (p.isLibrary()) libraryControls(panel,p);
+        else if (p.hasAcEncoder()) acControls(panel, p);
         else {
             title(panel, p.isAc() ? "Your AC scenes" : "Everyday controls", 21);
             if (p.commands.isEmpty()) text(panel, p.isAc() ? "Add complete AC signals, such as “Cool · 24°C · Auto fan” and “Off”." : "Add a command below or import a profile with codes for your model.", 16, MUTED);
@@ -130,7 +137,16 @@ public final class MainActivity extends Activity {
             status = text(panel, "Ready when you are. Appliance state is not known.", 14, MUTED);
             status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
         }
-        LinearLayout manage = card(); title(manage, "Make it yours", 20);
+        LinearLayout manage = card();
+        if (p == trialProfile) {
+            title(manage,"Testing a candidate",20);
+            text(manage,"Try one command and observe the AC. Save only after confirming the controls you need. No command is sent just by opening this screen.",14,MUTED);
+            button(manage,"Save this remote",true,this::saveTrial);
+            if (trialCandidate + 1 < trialBrand.profiles.size()) button(manage,"Try next candidate",false,() -> tryLibraryCandidate(p.libraryId,trialBrand,trialCandidate + 1));
+            button(manage,"Choose another candidate",false,() -> chooseLibraryCandidate(p.libraryId,trialBrand));
+            button(manage,"Cancel test",false,this::cancelTrial); return;
+        }
+        title(manage, "Make it yours", 20);
         text(manage, "Code families are candidates, not guaranteed matches. Test with the appliance in view.", 14, MUTED);
         button(manage, "Edit name, brand & model", false, this::editProfile);
         if (!p.hasAcEncoder()) button(manage, "Add or edit IR codes", false, this::chooseCommand);
@@ -142,6 +158,157 @@ public final class MainActivity extends Activity {
                 if (persist(next)) { profiles = next; current = profiles.isEmpty() ? null : profiles.get(0); store.select(current == null ? "" : current.id); screen = "devices"; render(); }
             }).show());
     }
+    private void pickLibraryFile() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE);
+        startActivityForResult(intent, LIBRARY_IMPORT);
+    }
+    private void browseLibrary() {
+        LibraryStore libraries = new LibraryStore(this); String id = libraries.selected();
+        if (id.isEmpty()) { new AlertDialog.Builder(this).setTitle("Add a profile library")
+            .setMessage("Import a Beam profile-library file, then choose a brand and test candidates. Libraries work offline.")
+            .setNegativeButton("Cancel", null).setPositiveButton("Choose file", (d,w) -> pickLibraryFile()).show(); return; }
+        try (LibraryCatalog catalog = LibraryCatalog.open(libraries.file(id))) {
+            List<LibraryCatalog.Brand> brands = catalog.brands;
+            LinearLayout form = form(); EditText search = field(form,"Search brand", "");
+            ListView list = new ListView(this); form.addView(list, new LinearLayout.LayoutParams(-1, dp(300)));
+            List<LibraryCatalog.Brand> visible = new ArrayList<>(brands);
+            ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1);
+            for (LibraryCatalog.Brand brand : visible) adapter.add(brand.name + " · " + brand.profiles.size() + " candidates");
+            list.setAdapter(adapter);
+            AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Profile library · " + brands.size() + " brands")
+                .setView(form).setNegativeButton("Close", null).setNeutralButton("Import library", (d,w) -> pickLibraryFile()).create();
+            search.addTextChangedListener(new android.text.TextWatcher() {
+                public void beforeTextChanged(CharSequence s,int start,int count,int after) {}
+                public void onTextChanged(CharSequence s,int start,int before,int count) {
+                    visible.clear(); adapter.clear(); String query = s.toString().toLowerCase(Locale.ROOT);
+                    for (LibraryCatalog.Brand brand : brands) if (brand.name.toLowerCase(Locale.ROOT).contains(query)) {
+                        visible.add(brand); adapter.add(brand.name + " · " + brand.profiles.size() + " candidates");
+                    }
+                }
+                public void afterTextChanged(android.text.Editable e) {}
+            });
+            list.setOnItemClickListener((parent,view,position,rowId) -> {
+                LibraryCatalog.Brand brand = visible.get(position); dialog.dismiss(); chooseLibraryCandidate(id,brand);
+            }); dialog.show();
+        } catch (Exception e) { alert("Library unavailable",e.getMessage()); }
+    }
+    private void chooseLibraryCandidate(String id, LibraryCatalog.Brand brand) {
+        String[] labels = new String[brand.profiles.size()];
+        for (int i=0;i<labels.length;i++) labels[i] = brand.profiles.get(i).name + " · " + brand.profiles.get(i).id;
+        new AlertDialog.Builder(this).setTitle(brand.name + " · choose a candidate")
+            .setItems(labels, (dialog,which) -> tryLibraryCandidate(id,brand,which)).setNegativeButton("Back",(d,w) -> browseLibrary()).show();
+    }
+    private void tryLibraryCandidate(String id, LibraryCatalog.Brand brand, int index) {
+        try {
+            LibraryCatalog.Entry entry = brand.profiles.get(index);
+            Profile p = new Profile(); p.kind = "AC"; p.protocol = "LIBRARY"; p.brand = brand.name.substring(0,Math.min(60,brand.name.length()));
+            p.model = entry.id.substring(0,Math.min(100,entry.id.length())); p.name = brand.name + " · " + entry.name;
+            p.libraryId = id; p.libraryEntry = entry.entry;
+            LibraryProfile source = libraryProfile(p); LibraryActions.initialize(p,source);
+            if (trialProfile == null) beforeTrial = current;
+            trialProfile = p; trialBrand = brand; trialCandidate = index; current = p; screen = "remote"; render();
+        } catch (Exception e) { alert("Cannot open candidate",e.getMessage()); }
+    }
+    private LibraryProfile libraryProfile(Profile p) throws IOException {
+        String key = p.libraryId + ":" + p.libraryEntry;
+        if (!key.equals(cachedLibraryKey)) {
+            try (LibraryCatalog catalog = LibraryCatalog.open(new LibraryStore(this).file(p.libraryId))) {
+                LibraryCatalog.Entry entry = catalog.find(p.libraryEntry);
+                if (entry == null) throw new IOException("This candidate is missing from its original library.");
+                cachedLibraryProfile = catalog.load(entry); cachedLibraryKey = key;
+            }
+        }
+        return cachedLibraryProfile;
+    }
+    private void saveTrial() {
+        Profile p = trialProfile;
+        if (p == null) return;
+        if (profiles.size() >= 50) { alert("Profile limit","Remove a saved device before saving another remote."); return; }
+        LinearLayout f = form(); EditText name = field(f,"Device name",p.name);
+        AlertDialog dialog = formDialog("Save working remote",f,"Save remote");
+        dialog.getButton(-1).setOnClickListener(v -> {
+            String label = name.getText().toString().trim();
+            if (label.isEmpty() || label.length()>60) { name.setError("Enter a name of 1–60 characters"); return; }
+            p.name = label; List<Profile> next = new ArrayList<>(profiles); next.add(p);
+            if (persist(next)) { profiles = next; store.select(p.id); trialProfile = null; beforeTrial = null; dialog.dismiss(); render(); }
+        });
+    }
+    private void cancelTrial() { current = beforeTrial; trialProfile = null; beforeTrial = null; screen = "devices"; render(); }
+    private void libraryControls(LinearLayout panel, Profile p) {
+        try {
+            LibraryProfile source = libraryProfile(p);
+            panel.setBackground(background(0xFFE5E8E4,38));
+            LinearLayout.LayoutParams shape = (LinearLayout.LayoutParams) panel.getLayoutParams();
+            shape.width = Math.min(getResources().getDisplayMetrics().widthPixels - dp(40),dp(390));
+            shape.gravity = Gravity.CENTER_HORIZONTAL; panel.setLayoutParams(shape);
+            LinearLayout display = column(); display.setPadding(dp(14),dp(10),dp(14),dp(10));
+            display.setBackground(background(0xFFD2DFC8,18)); panel.addView(display);
+            text(display,"IMPORTED CANDIDATE · NOT LIVE STATUS",10,GREEN);
+            TextView temperature = text(display,p.temperature + "°" + (source.minTemperature>45 && source.degreeType.equals("C") ? "" : source.degreeType),52,INK);
+            temperature.setGravity(Gravity.CENTER); temperature.setTypeface(Typeface.MONOSPACE,Typeface.BOLD);
+            String modeDisplay = LibraryActions.modes(source).isEmpty() ? "Mode: button control" : LibraryActions.modeName(p.libraryModeCode);
+            String fanDisplay = LibraryActions.fans(source).isEmpty() ? "Fan: button control" : "Fan code " + p.libraryFanCode;
+            TextView settings = text(display,modeDisplay + " · " + fanDisplay,16,INK); settings.setGravity(Gravity.CENTER);
+            status = text(display,"Ready · " + source.model + (preview ? " · Preview only" : ""),12,MUTED);
+            status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+            String on = LibraryActions.first(source,"POWER_ON","ON","POWER","ON_OFF","CAT_EYE","KEY_POWER_ON","BTN_POWER_ON","KEY_POWER","BTN_POWER");
+            String off = LibraryActions.first(source,"POWER_OFF","OFF","POWER_OFF_1","POWER_OFF_2","KEY_POWER_OFF","BTN_POWER_OFF");
+            LinearLayout power = row(panel);
+            Button onButton = button(power,off == null ? "Power" : "Power on",true,() -> libraryTap(panel,p,source,on,() -> {})); onButton.setEnabled(on != null);
+            if (off != null) button(power,"Power off",false,() -> libraryTap(panel,p,source,off,() -> {}));
+            LinearLayout temps = row(panel);
+            String down = LibraryActions.temperature(source,p,-1), up = LibraryActions.temperature(source,p,1);
+            button(temps,"−  TEMP",false,() -> libraryTap(panel,p,source,down,() -> p.temperature--)).setEnabled(down != null);
+            button(temps,"TEMP  +",false,() -> libraryTap(panel,p,source,up,() -> p.temperature++)).setEnabled(up != null);
+            List<String> modes = LibraryActions.modes(source), fans = LibraryActions.fans(source);
+            String nextMode = LibraryActions.next(modes,p.libraryModeCode), nextFan = LibraryActions.next(fans,p.libraryFanCode);
+            String modeKey = LibraryActions.first(source,"MODE","MODES","KEY_MODE","BTN_MODE");
+            if (modeKey == null) modeKey = LibraryActions.state(source,nextMode,p.temperature,p.libraryFanCode);
+            String fanKey = LibraryActions.first(source,"FAN_SPEED","FAN SPEED","FAN","SPEED","KEY_FAN","BTN_FAN");
+            if (fanKey == null) fanKey = LibraryActions.state(source,p.libraryModeCode,p.temperature,nextFan);
+            final String modeCommand = modeKey, fanCommand = fanKey;
+            LinearLayout basics = row(panel);
+            button(basics,"Mode",false,() -> libraryTap(panel,p,source,modeCommand,() -> p.libraryModeCode = nextMode)).setEnabled(modeKey != null);
+            button(basics,"Fan speed",false,() -> libraryTap(panel,p,source,fanCommand,() -> p.libraryFanCode = nextFan)).setEnabled(fanKey != null);
+            String swing = LibraryActions.first(source,"SWING","SWING_UP_DOWN","AIR_SWEEP","LR_SWING","SWEEP","KEY_SWING","BTN_SWING");
+            if (swing != null) button(panel,"Swing",false,() -> libraryTap(panel,p,source,swing,() -> {}));
+            button(panel,"All commands · " + source.commands.size(),false,() -> chooseLibraryCommand(panel,p,source));
+            text(panel,"Each tap sends the candidate's stored signal. Numbered candidates are code families, not confirmed model matches. Fan numbers are source codes; their physical speed depends on the AC. Missing commands are disabled.",13,MUTED);
+            text(panel,"Extra functions and exact temperature/fan combinations are available in All commands. A beep alone does not confirm the requested setting. Timers and power commands can change appliance state.",12,MUTED);
+        } catch (Exception e) { status = text(panel,e.getMessage(),15,MUTED); button(panel,"Import missing library",true,this::pickLibraryFile); }
+    }
+    private void libraryTap(LinearLayout panel, Profile p, LibraryProfile source, String key, Runnable change) {
+        if (transmitter.isBusy()) { status.setText("Please wait for the previous signal."); return; }
+        try {
+            if (key == null) throw new IllegalArgumentException("This candidate does not contain that command.");
+            Signal signal = source.signal(key); // Validate before changing requested settings.
+            change.run(); if (p != trialProfile) persist(profiles);
+            panel.removeAllViews(); libraryControls(panel,p); send(signal);
+        } catch (Exception e) { alert("Command unavailable",e.getMessage()); }
+    }
+    private void chooseLibraryCommand(LinearLayout panel, Profile p, LibraryProfile source) {
+        List<String> keys = new ArrayList<>(source.commands.keySet()); Collections.sort(keys);
+        LinearLayout f = form(); EditText search = field(f,"Search command", ""); ListView list = new ListView(this);
+        f.addView(list,new LinearLayout.LayoutParams(-1,dp(300))); List<String> visible = new ArrayList<>(keys);
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(this,android.R.layout.simple_list_item_1,new ArrayList<>(visible)); list.setAdapter(adapter);
+        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Commands · " + source.model).setView(f).setNegativeButton("Close",null).create();
+        search.addTextChangedListener(new android.text.TextWatcher() {
+            public void beforeTextChanged(CharSequence s,int start,int count,int after) {}
+            public void afterTextChanged(android.text.Editable e) {}
+            public void onTextChanged(CharSequence s,int start,int before,int count) {
+                visible.clear(); adapter.clear(); String query = s.toString().toUpperCase(Locale.ROOT);
+                for (String key : keys) if (key.contains(query)) { visible.add(key); adapter.add(key); }
+            }
+        });
+        list.setOnItemClickListener((parent,view,position,id) -> {
+            String key = visible.get(position); dialog.dismiss();
+            libraryTap(panel,p,source,key,() -> {
+                java.util.regex.Matcher match = java.util.regex.Pattern.compile("^([CHWD])([0-9]{1,3})F([0-9A])$").matcher(key);
+                if (match.matches()) { int temp = Integer.parseInt(match.group(2)); if (temp >= 0 && temp <= 100) { p.libraryModeCode = match.group(1); p.temperature = temp; p.libraryFanCode = match.group(3); } }
+            });
+        }); dialog.show();
+    }
+
     private void acControls(LinearLayout panel, Profile p) {
         panel.setBackground(background(0xFFE5E8E4, 38)); panel.setElevation(dp(3));
         LinearLayout.LayoutParams shellParams = (LinearLayout.LayoutParams) panel.getLayoutParams();
@@ -322,8 +489,18 @@ public final class MainActivity extends Activity {
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
         if (result != RESULT_OK || data == null || data.getData() == null) return;
-        if (request != IMPORT && request != EXPORT) return;
+        if (request != IMPORT && request != EXPORT && request != LIBRARY_IMPORT) return;
         final android.net.Uri uri = data.getData();
+        if (request == LIBRARY_IMPORT) {
+            Toast.makeText(this,"Importing library…",Toast.LENGTH_SHORT).show();
+            fileWorker.execute(() -> {
+                try (InputStream input = getContentResolver().openInputStream(uri)) {
+                    if (input == null) throw new IOException("Cannot read selected library.");
+                    new LibraryStore(getApplicationContext()).install(input);
+                    runOnUiThread(() -> { if (!isDestroyed()) { cachedLibraryKey = ""; browseLibrary(); } });
+                } catch (Exception e) { runOnUiThread(() -> { if (!isDestroyed()) alert("Could not import library",e.getMessage()); }); }
+            }); return;
+        }
         String snapshot = null;
         try {
             if (request == EXPORT) {
